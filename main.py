@@ -18,12 +18,26 @@ def calculate_speed(error, dead_zone):
     ratio = min(effective_distance / max_error, 1)  # 0 ile 1 arasında oran
     speed = MIN_SPEED + ratio * (MAX_SPEED - MIN_SPEED)  # Hızı MIN_SPEED ile MAX_SPEED arasında hesapla
     return int(speed)
+
+class SpeedSmoother:
+     def __init__(self, smoothing_factor=0.3):
+          self.current_speed= 0.0
+          self.smoothing_factor = smoothing_factor
+
+     def update(self, target_speed):
+          self.current_speed = (self.current_speed+ self.smoothing_factor * (target_speed - self.current_speed))
+          return int(self.current_speed)
+     
+            
+        
     
 
 
 
 def main():
     detector = HandDetector()
+    speed_smoother_x = SpeedSmoother(smoothing_factor=0.3)
+    speed_smoother_y = SpeedSmoother(smoothing_factor=0.3)
 
     cap = cv2.VideoCapture(0)
 
@@ -50,10 +64,16 @@ def main():
             height, width, _ = frame.shape
             center_x, center_y = detector.get_hand_center(hand, width, height)
             camera_center_x, camera_center_y = width // 2, height // 2 #kameranın merkezini bulma kısmı
+
             error_x = center_x - camera_center_x # el ile kamera arasındaki hata 
             error_y = center_y - camera_center_y
+
             speed_x = calculate_speed(error_x, DEAD_ZONE_X) # elin konumuna göre motor hızını hesaplama
             speed_y = calculate_speed(error_y, DEAD_ZONE_Y)
+
+            smooth_speed_x = speed_smoother_x.update(speed_x) # yumuşlatılmış motor hızını hesaplama
+            smooth_speed_y = speed_smoother_y.update(speed_y)
+
             if abs(error_x) <= DEAD_ZONE_X:
                 direction_x = "Center" #merkezde
             elif error_x > 0:
@@ -100,13 +120,16 @@ def main():
             )
             cv2.putText(
                 frame,
-                f"Speed: ({speed_x}, {speed_y})",
+                f"Speed: ({smooth_speed_x}, {smooth_speed_y})",
                 (20, 200),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (0, 255, 0),
                 2
             )
+        if hand is None:
+            speed_smoother_x.update(0)  # El algılanmadığında hızları sıfırla
+            speed_smoother_y.update(0)    
 
 
         current_time = time.time()
