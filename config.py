@@ -11,3 +11,7 @@ CENTER_TOLERANCE = 40
 
 DEAD_ZONE_X = 30 # Bunu aşarsa el sağda sayılır
 DEAD_ZONE_Y = 30
+
+# Motor / takip hızı ayarları
+MIN_SPEED = 20
+MAX_SPEED = 100

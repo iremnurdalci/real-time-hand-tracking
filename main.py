@@ -3,6 +3,23 @@ import time
 
 from hand_detector import HandDetector
 from config import DEAD_ZONE_X, DEAD_ZONE_Y
+from config import DEAD_ZONE_X, DEAD_ZONE_Y, MIN_SPEED, MAX_SPEED
+
+def calculate_speed(error, dead_zone):
+    """
+    Hata değerine göre motor hızını hesaplar.
+    Hata değeri dead_zone'u aşarsa hız artar.
+    """
+    distance = abs(error)
+    if distance <= dead_zone:
+        return 0  # Dead zone içinde hız yok
+    effective_distance = distance - dead_zone
+    max_error = 320 - dead_zone  # Maksimum hata değeri (kamera merkezinden kenara kadar)
+    ratio = min(effective_distance / max_error, 1)  # 0 ile 1 arasında oran
+    speed = MIN_SPEED + ratio * (MAX_SPEED - MIN_SPEED)  # Hızı MIN_SPEED ile MAX_SPEED arasında hesapla
+    return int(speed)
+    
+
 
 
 def main():
@@ -35,6 +52,8 @@ def main():
             camera_center_x, camera_center_y = width // 2, height // 2 #kameranın merkezini bulma kısmı
             error_x = center_x - camera_center_x # el ile kamera arasındaki hata 
             error_y = center_y - camera_center_y
+            speed_x = calculate_speed(error_x, DEAD_ZONE_X) # elin konumuna göre motor hızını hesaplama
+            speed_y = calculate_speed(error_y, DEAD_ZONE_Y)
             if abs(error_x) <= DEAD_ZONE_X:
                 direction_x = "Center" #merkezde
             elif error_x > 0:
@@ -77,6 +96,15 @@ def main():
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (255, 255, 0),
+                2
+            )
+            cv2.putText(
+                frame,
+                f"Speed: ({speed_x}, {speed_y})",
+                (20, 200),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
                 2
             )
 
