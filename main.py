@@ -2,43 +2,16 @@ import cv2
 import time
 
 from hand_detector import HandDetector
-from config import DEAD_ZONE_X, DEAD_ZONE_Y
-from config import DEAD_ZONE_X, DEAD_ZONE_Y, MIN_SPEED, MAX_SPEED
-
-def calculate_speed(error, dead_zone):
-    """
-    Hata değerine göre motor hızını hesaplar.
-    Hata değeri dead_zone'u aşarsa hız artar.
-    """
-    distance = abs(error)
-    if distance <= dead_zone:
-        return 0  # Dead zone içinde hız yok
-    effective_distance = distance - dead_zone
-    max_error = 320 - dead_zone  # Maksimum hata değeri (kamera merkezinden kenara kadar)
-    ratio = min(effective_distance / max_error, 1)  # 0 ile 1 arasında oran
-    speed = MIN_SPEED + ratio * (MAX_SPEED - MIN_SPEED)  # Hızı MIN_SPEED ile MAX_SPEED arasında hesapla
-    return int(speed)
-
-class SpeedSmoother:
-     def __init__(self, smoothing_factor=0.3):
-          self.current_speed= 0.0
-          self.smoothing_factor = smoothing_factor
-
-     def update(self, target_speed):
-          self.current_speed = (self.current_speed+ self.smoothing_factor * (target_speed - self.current_speed))
-          return int(self.current_speed)
-     
-            
-        
-    
-
+from tracker import Tracker #hız ve yön hesaplamalarını bu sınıftan alıyoruz
 
 
 def main():
-    detector = HandDetector()
-    speed_smoother_x = SpeedSmoother(smoothing_factor=0.3)
-    speed_smoother_y = SpeedSmoother(smoothing_factor=0.3)
 
+    # Sınıfları oluştur
+    detector = HandDetector()
+    tracker = Tracker()
+
+    # Kamerayı başlat
     cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
@@ -51,87 +24,93 @@ def main():
     previous_time = time.time()
 
     while True:
+
         success, frame = cap.read()
 
         if not success:
             print("Görüntü alınamadı!")
             break
 
+        # Görüntüyü yatay olarak çevir
         frame = cv2.flip(frame, 1)
 
+        # Eli algıla
         hand = detector.detect(frame)
-        if hand :
+
+        if hand is not None:
+
             height, width, _ = frame.shape
-            center_x, center_y = detector.get_hand_center(hand, width, height)
-            camera_center_x, camera_center_y = width // 2, height // 2 #kameranın merkezini bulma kısmı
 
-            error_x = center_x - camera_center_x # el ile kamera arasındaki hata 
-            error_y = center_y - camera_center_y
+            # Elin merkez koordinatlarını bul
+            center = detector.get_hand_center(
+                hand, width, height
+            )
 
-            speed_x = calculate_speed(error_x, DEAD_ZONE_X) # elin konumuna göre motor hızını hesaplama
-            speed_y = calculate_speed(error_y, DEAD_ZONE_Y)
+            # Takip verilerini hesapla
+            tracking_data = tracker.update(
+                center, width, height
+            )
 
-            smooth_speed_x = speed_smoother_x.update(speed_x) # yumuşlatılmış motor hızını hesaplama
-            smooth_speed_y = speed_smoother_y.update(speed_y)
+            center_x, center_y = tracking_data["center"]
+            camera_center_x, camera_center_y = tracking_data["camera_center"]
 
-            if abs(error_x) <= DEAD_ZONE_X:
-                direction_x = "Center" #merkezde
-            elif error_x > 0:
-                direction_x = "Right"   #sağda
-            else:
-                direction_x = "Left" # solda
+            error_x, error_y = tracking_data["error"]
+            direction_x, direction_y = tracking_data["direction"]
+            speed_x, speed_y = tracking_data["speed"]
 
-            if abs(error_y) <= DEAD_ZONE_Y:
-                    direction_y = "Center" 
-            elif error_y > 0:
-                    direction_y = "down"    
-            else:
-                    direction_y = "up"
+            # El merkezini kırmızı noktayla göster
+            cv2.circle(
+                frame, (center_x, center_y),
+                10, (0, 0, 255), -1
+            )
 
+            # Kamera merkezini mavi noktayla göster
+            cv2.circle(
+                frame, (camera_center_x, camera_center_y),
+                8, (255, 0, 0), -1
+            )
 
-            cv2.circle(frame, (center_x, center_y), 10, (0, 0, 255), -1)# elin merkezini kırmızı nokta olarak gösterir
-            cv2.circle(frame, (camera_center_x, camera_center_y), 8, (255, 0, 0), -1) # kameranın merkezini mavi nokta olarak gösterir
-            cv2.putText(# merkez kordinatlarını ekrana yazdırma kısmı
+            # El koordinatları
+            cv2.putText(
                 frame,
                 f"Hand: ({center_x}, {center_y})",
                 (20, 80),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2
+                0.8, (0, 255, 0), 2
             )
+
+            # Hata değerleri
             cv2.putText(
                 frame,
                 f"Error: ({error_x}, {error_y})",
                 (20, 120),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 255),
-                2
+                0.8, (0, 255, 255), 2
             )
+
+            # Yön bilgisi
             cv2.putText(
                 frame,
                 f"Direction: ({direction_x}, {direction_y})",
                 (20, 160),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 0),
-                2
+                0.7, (255, 255, 0), 2
             )
+
+            # Hız bilgisi
             cv2.putText(
                 frame,
-                f"Speed: ({smooth_speed_x}, {smooth_speed_y})",
+                f"Speed: ({speed_x}, {speed_y})",
                 (20, 200),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2
+                0.7, (0, 255, 0), 2
             )
-        if hand is None:
-            speed_smoother_x.update(0)  # El algılanmadığında hızları sıfırla
-            speed_smoother_y.update(0)    
 
+        else:
+            # El algılanmazsa takip hızlarını sıfırla
+            tracker.reset()
 
+        # FPS hesaplama
         current_time = time.time()
         fps = 1 / (current_time - previous_time)
         previous_time = current_time
@@ -141,13 +120,13 @@ def main():
             f"FPS: {int(fps)}",
             (20, 40),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (0, 255, 0),
-            2
+            0.8, (0, 255, 0), 2
         )
 
+        # Görüntüyü göster
         cv2.imshow("Hand Tracking", frame)
 
+        # Q tuşuyla çık
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
