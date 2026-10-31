@@ -1,5 +1,9 @@
 import cv2
 import mediapipe as mp
+from config import(
+    MIN_DETECTION_CONFIDENCE,
+    MIN_TRACKING_CONFIDENCE
+)
 
 
 class HandDetector:
@@ -10,8 +14,8 @@ class HandDetector:
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=1,  # bir el arıyoruz
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
+            min_detection_confidence=MIN_DETECTION_CONFIDENCE,
+            min_tracking_confidence=MIN_TRACKING_CONFIDENCE
         )
 
         self.mp_draw = mp.solutions.drawing_utils
@@ -60,4 +64,5 @@ class HandDetector:
         )
 
         return center_x, center_y
-   
+    def close(self):
+        self.hands.close()
